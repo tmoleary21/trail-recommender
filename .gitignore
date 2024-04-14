@@ -7,7 +7,7 @@ spark/spark-3.5.1-bin-hadoop3
 # Ignore Gradle build output directory
 build
 
-app/bin
+bin
 
 # Raw Data
 data/cpw_trails
