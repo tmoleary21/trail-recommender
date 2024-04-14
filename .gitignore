@@ -1,1 +1,13 @@
+# Spark
 spark/spark-3.5.1-bin-hadoop3
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+app/bin
+
+# Raw Data
+data/cpw_trails
