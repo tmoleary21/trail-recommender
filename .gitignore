@@ -10,4 +10,10 @@ build
 bin
 
 # Raw Data
-data/cpw_trails
+data/raw/cpw_trails
+
+data/trails
+
+.vscode
+
+

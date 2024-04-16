@@ -12,3 +12,9 @@ Term project for CS555 at CSU built by Tyson O'Leary (@tmoleary21) and Jackson V
 ### Start cluster: `$SPARK_HOME/sbin/start-all.sh`
 
 ### Stop cluster: `$SPARK_HOME/sbin/stop-all.sh`
+
+
+## Notes
+
+* For the `gradle` command, use `module load courses/cs555`
+* When submitting the job, first use `module load java/11`
