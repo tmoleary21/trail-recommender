@@ -13,46 +13,78 @@ import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.OneHotEncoderModel;
+import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.ml.feature.StringIndexerModel;
+import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.sql.Encoders;
+
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.SparkConf;
 
 public class App {
 
-    public static void main(String[] args) {
+	static final String[] optionFields = {
+			"access", "manager", "seasonal_1", "seasonal_2", "seasonal_3", "seasonalit", "surface", "type"
+	};
+	static final String[] indexedFields = {
+			"accessI", "managerI", "seasonal_1I", "seasonal_2I", "seasonal_3I", "seasonalitI", "surfaceI", "typeI"
+	};
+	static final String[] encodedFields = {
+			"accessE", "managerE", "seasonal_1E", "seasonal_2E", "seasonal_3E", "seasonalitE", "surfaceE", "typeE"
+	};
 
-        SparkSession spark = SparkSession.builder()
-                .appName("Simple Application")
-                .getOrCreate();
+	public static void main(String[] args) {
 
-        Dataset<Row> trailsDataset = spark.read()
-                .json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl");
+		SparkSession spark = SparkSession.builder()
+				.appName("Trail Recommender")
+				.getOrCreate();
 
-        trailsDataset.printSchema();
+		Dataset<Row> trailsDataset = spark.read()
+				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl");
 
-        // StructType strut = new StructType(new StructField[] {
-        // new StructField("q", null, false, null)
-        // });
+		trailsDataset.printSchema();
 
-        trailsDataset.show(4);
+		trailsDataset.show(4);
 
-        String[] optionFields = {
-                "properties.access", "properties.manager", "properties.seasonal_1", "properties.seasonal_2",
-                "properties.seasonal_3", "properties.seasonalit", "properties.surface", "properties.type"
-        };
-        String[] outputVectorFields = {
-                "accessO", "managerO", "seasonal_1O", "seasonal_2O", "seasonal_3O", "seasonalitO", "surfaceO", "typeO"
-        };
-        OneHotEncoder encoder = new OneHotEncoder()
-                .setInputCols(optionFields)
-                .setOutputCols(outputVectorFields)
-                .setDropLast(false);
+		// Only way I could figure to get properties out without making huge schema
+		trailsDataset.createOrReplaceTempView("trails");
+		Dataset<Row> properties = spark.sql("SELECT properties.* FROM trails");
 
-        OneHotEncoderModel model = encoder.fit(trailsDataset);
-        Dataset<Row> encoded = model.transform(trailsDataset);
+		properties.show(4);
+		properties.printSchema();
 
-        encoded.show();
+		StringIndexer indexer = new StringIndexer()
+				.setInputCols(optionFields)
+				.setOutputCols(indexedFields)
+				.setHandleInvalid("keep"); // Keep null values as the final index
+		StringIndexerModel indexerModel = indexer.fit(properties);
+		Dataset<Row> indexedProperties = indexerModel.transform(properties);
 
-        spark.stop();
+		// Because we kept null values in the StringIndexer, we will keep the default
+		// dropLast=true for the encoder.
+		// This way, nulls are encoded as a vector of all zeros
+		OneHotEncoder encoder = new OneHotEncoder()
+				.setInputCols(indexedFields)
+				.setOutputCols(encodedFields);
+		OneHotEncoderModel model = encoder.fit(indexedProperties);
+		Dataset<Row> encoded = model.transform(indexedProperties);
 
-    }
+		encoded.show(4);
+
+		VectorAssembler assembler = new VectorAssembler()
+				.setInputCols(encodedFields)
+				.setOutputCol("vector");
+		Dataset<Row> withVector = assembler.transform(encoded);
+
+		Dataset<Row> cleaned = withVector.drop(optionFields);
+		cleaned = cleaned.drop(indexedFields);
+		cleaned = cleaned.drop(encodedFields);
+
+		cleaned.show(10);
+
+		spark.stop();
+
+	}
 
 }
