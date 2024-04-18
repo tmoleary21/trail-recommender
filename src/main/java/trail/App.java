@@ -4,19 +4,35 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 
+import javax.sql.rowset.RowSetFactory;
+
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.api.java.UDF1;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.NumericType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.sparkproject.dmg.pmml.DataType;
+
+import com.google.protobuf.Struct;
+
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.api.java.function.FilterFunction;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.api.java.function.ReduceFunction;
 import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.OneHotEncoderModel;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.ml.feature.VectorAssembler;
+import org.apache.spark.ml.linalg.DenseVector;
+import org.apache.spark.ml.linalg.SparseVector;
 import org.apache.spark.sql.Encoders;
+import org.apache.spark.sql.expressions.UserDefinedFunction;
+import static org.apache.spark.sql.functions.udf;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaRDD;
@@ -25,7 +41,11 @@ import org.apache.spark.SparkConf;
 public class App {
 
 	private static final String[] identifierFields = {
-			"feature_id", "name"
+			"feature_id",
+			"name",
+			"name_1",
+			"name_2",
+			"name_3"
 	};
 
 	private static final String[] irrelevantFields = {
@@ -40,10 +60,7 @@ public class App {
 			"place_id",
 			"place_id_1",
 			"place_id_2",
-			"place_id_3",
-			"name_1",
-			"name_2",
-			"name_3"
+			"place_id_3"
 	};
 
 	private static final String[] optionFields = {
@@ -88,19 +105,99 @@ public class App {
 	}
 
 	private static void run(SparkSession spark) {
+
+		// User inputs (temporary) --------------
+
+		String[] trailQueries = { "Horsetooth Rock Trail", "Arthur's Rock Trail" }; // place_id 13275, 13875 resp.
+
+		double locationLatitude = 40.575405;
+		double locationLongitude = -105.084648;
+
+		// ---------------------------------------
+
+		// Only works because the CS machines share our home directories
 		Dataset<Row> trailsDataset = spark.read()
 				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl");
 
-		Dataset<Row> properties = replaceRoot(spark, trailsDataset, "properties");
-		properties = properties.drop(irrelevantFields);
+		Dataset<Row> properties = getProperties(spark, trailsDataset);
 
 		Dataset<Row> numeric = properties.drop(allStringFields);
 
 		Dataset<Row> categorical = properties.drop(numericFields);
-		Dataset<Row> vectorized = vectorize(categorical);
 
-		vectorized.show(10);
-		numeric.show(10);
+		Dataset<Row> similarityScores = calculateSimilarityScores(spark, categorical, trailQueries);
+		similarityScores.show(4);
+
+		// vectorized.show(10);
+		// numeric.show(10);
+
+	}
+
+	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> categorical,
+			String[] trailQueries) {
+		Dataset<Row> vectorized = vectorize(categorical);
+		vectorized.persist();
+
+		// Find all the trails matching user input
+		Dataset<Row> queriedTrails = vectorized.filter((FilterFunction<Row>) row -> nameIncluded(trailQueries, row));
+		// Merge to one vector
+		SparseVector query = mergeTrailProperties(queriedTrails);
+
+		// Define similarity score function
+		UserDefinedFunction score = udf(
+				(UDF1<SparseVector, Double>) (SparseVector vec) -> vec.dot(query), DataTypes.DoubleType);
+		spark.udf().register("score", score);
+
+		// Calculate similarity score for all trails
+		vectorized.createOrReplaceTempView("vectorized");
+		Dataset<Row> similarityScores = spark
+				.sql("SELECT *, score(vector) as similarity FROM vectorized");
+		similarityScores = similarityScores.drop("vector");
+
+		return similarityScores;
+	}
+
+	private static SparseVector mergeTrailProperties(Dataset<Row> queriedTrails) {
+		Dataset<Row> justVectors = queriedTrails.select("vector");
+		Row reducedRow = justVectors.reduce((ReduceFunction<Row>) App::addRowVectors);
+		return (SparseVector) reducedRow.get(0);
+	}
+
+	private static Row addRowVectors(Row row1, Row row2) {
+		SparseVector v1 = (SparseVector) row1.get(0); // Can't do string index without a schema
+		SparseVector v2 = (SparseVector) row2.get(0); // Also can't figure out how to add schema
+		return RowFactory.create(addVectors(v1, v2));
+	}
+
+	private static SparseVector addVectors(SparseVector v1, SparseVector v2) {
+		double[] sumVec = v1.toArray();
+		int[] indices2 = v2.indices();
+		double[] values2 = v2.values();
+		for (int i = 0; i < indices2.length; i++) {
+			sumVec[indices2[i]] += values2[i];
+		}
+		return new DenseVector(sumVec).toSparse();
+	}
+
+	private static boolean nameIncluded(String[] trailQueries, Row row) {
+		return contains(trailQueries, row.getAs("name"))
+				|| contains(trailQueries, row.getAs("name_1"))
+				|| contains(trailQueries, row.getAs("name_2"))
+				|| contains(trailQueries, row.getAs("name_3"));
+	}
+
+	private static boolean contains(String[] items, String query) {
+		for (String item : items) {
+			if (item.equals(query)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static Dataset<Row> getProperties(SparkSession spark, Dataset<Row> trailsDataset) {
+		Dataset<Row> properties = replaceRoot(spark, trailsDataset, "properties");
+		return properties.drop(irrelevantFields);
 	}
 
 	private static Dataset<Row> replaceRoot(SparkSession spark, Dataset<Row> df, String subStructField) {
