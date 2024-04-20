@@ -16,4 +16,6 @@ data/trails
 
 .vscode
 
+__pycache__
 
+/**/env/*
