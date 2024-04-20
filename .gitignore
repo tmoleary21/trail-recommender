@@ -19,3 +19,5 @@ data/trails
 __pycache__
 
 /**/env/*
+
+.idea
