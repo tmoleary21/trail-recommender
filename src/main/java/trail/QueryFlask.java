@@ -5,10 +5,12 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-public class QueryFlask {
-    private static final String FLASK_SERVER = "http://phoenix:6000/forecast";
+import org.json.*;
 
-    private static String queryFlaskServer(String serverUrl, Point point) throws Exception {
+public class QueryFlask {
+    public static final String FLASK_SERVER = "http://phoenix:6000/forecast";
+
+    public static Forecast queryFlaskServer(String serverUrl, Point point) throws Exception {
         URL flaskURL = new URL(serverUrl);
         HttpURLConnection connection = (HttpURLConnection) flaskURL.openConnection();
         connection.setDoOutput(true);
@@ -33,14 +35,18 @@ public class QueryFlask {
         }
         in.close();
 
-        return content.toString();
+        String responseBody = content.toString();
+        JSONObject jsonObject = new JSONObject(responseBody);
+
+        return new Forecast(jsonObject);
     }
 
     /* uncomment if you want a demonstration */
 //    public static void main (String[] args) {
 //        Point point = new Point(40, -105);
 //        try {
-//            System.out.println(queryFlaskServer(FLASK_SERVER, point));
+//            Forecast forecast = queryFlaskServer(FLASK_SERVER, point);
+//            System.out.println(forecast);
 //        } catch (Exception e) {
 //            throw new RuntimeException(e);
 //        }

@@ -4,14 +4,14 @@ plugins {
 }
 
 dependencies {
+    // https://mvnrepository.com/artifact/org.json/json
+    implementation group: 'org.json', name: 'json', version: '20240303'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-core
     implementation 'org.apache.spark:spark-core_2.13:3.5.1'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
     compileOnly 'org.apache.spark:spark-sql_2.13:3.5.1'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-mllib
     compileOnly 'org.apache.spark:spark-mllib_2.13:3.5.1'
-
-    implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 repositories {
