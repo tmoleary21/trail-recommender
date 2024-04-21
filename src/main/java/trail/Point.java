@@ -16,12 +16,4 @@ public class Point {
     public int getLon() {
         return lon;
     }
-
-    public void setLat(int lat) {
-        this.lat = lat;
-    }
-
-    public void setLon(int lon) {
-        this.lon = lon;
-    }
 }
