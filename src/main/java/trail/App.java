@@ -3,6 +3,7 @@ package trail;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 
 import javax.sql.rowset.RowSetFactory;
 
@@ -12,6 +13,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.NumericType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.locationtech.jts.geom.Geometry;
 import org.sparkproject.dmg.pmml.DataType;
 
 import com.google.protobuf.Struct;
@@ -32,10 +34,18 @@ import org.apache.spark.ml.linalg.DenseVector;
 import org.apache.spark.ml.linalg.SparseVector;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
+
+import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.functions.udf;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.sedona.core.formatMapper.shapefileParser.ShapefileReader;
+import org.apache.sedona.core.spatialRDD.SpatialRDD;
+import org.apache.sedona.core.utils.SedonaConf;
+import org.apache.sedona.spark.SedonaContext;
+import org.apache.sedona.sql.utils.Adapter;
+import org.apache.sedona.sql.utils.SedonaSQLRegistrator;
 import org.apache.spark.SparkConf;
 
 public class App {
@@ -94,8 +104,8 @@ public class App {
 
 	public static void main(String[] args) {
 
-		try (SparkSession spark = SparkSession.builder()
-				.appName("Trail Recommender")
+		try (SparkSession spark = SedonaContext.builder()
+				.appName("Trail recommender")
 				.getOrCreate();) {
 
 			run(spark);
@@ -116,20 +126,27 @@ public class App {
 		// ---------------------------------------
 
 		// Only works because the CS machines share our home directories
-		Dataset<Row> trailsDataset = spark.read()
-				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl");
+		// multiline option needed to read json that's not in json lines format
+		String schema = "type string, crs string, features array<struct<type string, geometry string, properties map<string, string>>>";
+		Dataset<Row> trailsDataset = spark.read().schema(schema).option("multiLine", true)
+				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/raw/cpw_trails/json/Trails_COTREX02072024.json")
+				.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
+				.select("features.*") // Unpack the features struct.
+				.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")); // Convert the geometry string.
+				// .withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG::26913','EPSG:4326')")) // Convert CRS to EPSG:4326
+				// .select("properties.*", "geometry") // Flatten
+				// .drop(irrelevantFields);
 
-		Dataset<Row> properties = getProperties(spark, trailsDataset);
+		trailsDataset.printSchema();
+		trailsDataset.show(1);
 
-		Dataset<Row> numeric = properties.drop(allStringFields);
+		// trailsDataset = calculateSimilarityScores(spark, trailsDataset,
+		// 		trailQueries);
 
-		Dataset<Row> categorical = properties.drop(numericFields);
+		// String userLocationSql = "ST_GeomFromWKT(Point("+locationLongitude+" "+locationLatitude+"))";
+		// trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
 
-		Dataset<Row> similarityScores = calculateSimilarityScores(spark, categorical, trailQueries);
-		similarityScores.show(4);
-
-		// vectorized.show(10);
-		// numeric.show(10);
+		// trailsDataset.select("distance").show(10);
 
 	}
 
@@ -153,7 +170,7 @@ public class App {
 		Dataset<Row> similarityScores = spark
 				.sql("SELECT *, score(vector) as similarity FROM vectorized");
 		similarityScores = similarityScores.drop("vector");
-
+		vectorized.unpersist();
 		return similarityScores;
 	}
 
@@ -196,14 +213,10 @@ public class App {
 	}
 
 	private static Dataset<Row> getProperties(SparkSession spark, Dataset<Row> trailsDataset) {
-		Dataset<Row> properties = replaceRoot(spark, trailsDataset, "properties");
+		trailsDataset.createOrReplaceTempView("trails");
+		// Move properties to root
+		Dataset<Row> properties = spark.sql("SELECT properties.*, geometry FROM trails");
 		return properties.drop(irrelevantFields);
-	}
-
-	private static Dataset<Row> replaceRoot(SparkSession spark, Dataset<Row> df, String subStructField) {
-		// Only way I could figure to get properties out without making huge schema
-		df.createOrReplaceTempView("replacement_view");
-		return spark.sql("SELECT " + subStructField + ".* FROM replacement_view");
 	}
 
 	private static Dataset<Row> vectorize(Dataset<Row> categoricalProperties) {
