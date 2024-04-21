@@ -32,12 +32,12 @@ def queryAPI(apiUrl):
 
 def formatForecast(response):
     soonestPeriod = response["properties"]["periods"][0]
-    
+
     forecast = {
         "shortForecast": soonestPeriod["shortForecast"],
         "detailedForecast": soonestPeriod["detailedForecast"],
         "pctPrecipitation": soonestPeriod["probabilityOfPrecipitation"]["value"],
-        "pctRelativeHumiditiy": soonestPeriod["relativeHumidity"]["value"],
+        "pctRelativeHumidity": soonestPeriod["relativeHumidity"]["value"],
         "temperature": soonestPeriod["temperature"],
         "windSpeed": soonestPeriod["windSpeed"],
         "startTime": soonestPeriod["startTime"],
