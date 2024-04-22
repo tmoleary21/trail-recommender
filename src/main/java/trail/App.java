@@ -127,26 +127,29 @@ public class App {
 
 		// Only works because the CS machines share our home directories
 		// multiline option needed to read json that's not in json lines format
-		String schema = "type string, crs string, features array<struct<type string, geometry string, properties map<string, string>>>";
+		String schema = "type string, crs string, features array<struct<type string, geometry string, properties string>>";
 		Dataset<Row> trailsDataset = spark.read().schema(schema).option("multiLine", true)
 				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/raw/cpw_trails/json/Trails_COTREX02072024.json")
 				.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
 				.select("features.*") // Unpack the features struct.
-				.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")); // Convert the geometry string.
-				// .withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG::26913','EPSG:4326')")) // Convert CRS to EPSG:4326
+				// .withColumn("properties", expr("from_json(properties, schema_of_json(properties))"))
+				.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
+				.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")) // Convert CRS to EPSG:4326
 				// .select("properties.*", "geometry") // Flatten
-				// .drop(irrelevantFields);
+				.select("geometry") // TODO: SWITCH TO USING PROPERTIES AGAIN. TEMP
+				.drop(irrelevantFields);
 
 		trailsDataset.printSchema();
 		trailsDataset.show(1);
 
-		// trailsDataset = calculateSimilarityScores(spark, trailsDataset,
-		// 		trailQueries);
+		// trailsDataset = calculateSimilarityScores(spark, trailsDataset, trailQueries);
+		trailsDataset = trailsDataset.drop(allStringFields).drop(numericFields); //TEMP
 
-		// String userLocationSql = "ST_GeomFromWKT(Point("+locationLongitude+" "+locationLatitude+"))";
-		// trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
 
-		// trailsDataset.select("distance").show(10);
+		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
+		trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
+
+		trailsDataset.show(10);
 
 	}
 
