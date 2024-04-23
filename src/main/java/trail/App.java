@@ -18,6 +18,8 @@ import org.sparkproject.dmg.pmml.DataType;
 
 import com.google.protobuf.Struct;
 
+import scala.collection.mutable.StringBuilder;
+
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -125,37 +127,138 @@ public class App {
 
 		// ---------------------------------------
 
+		String trailPropertiesSchema = "struct<"
+			+"EDIT_DATE string,"
+			+"INPUT_DATE string,"
+			+"access string,"
+			+"atv string,"
+			+"bike string,"
+			+"dogs string,"
+			+"feature_id string,"
+			+"groomed string,"
+			+"groomer_ur string,"
+			+"highway_ve string,"
+			+"hiking string,"
+			+"horse string,"
+			+"length_mi_ double,"
+			+"manager string,"
+			+"max_elevat double,"
+			+"min_elevat double,"
+			+"motorcycle string,"
+			+"name string,"
+			+"name_1 string,"
+			+"name_2 string,"
+			+"name_3 string,"
+			+"ohv_gt_50 string,"
+			+"oneway string,"
+			+"place_id long,"
+			+"place_id_1 long,"
+			+"place_id_2 long,"
+			+"place_id_3 long,"
+			+"plowed string,"
+			+"seasonal_1 string,"
+			+"seasonal_2 string,"
+			+"seasonal_3 string,"
+			+"seasonalit string,"
+			+"ski string,"
+			+"snowmobile string,"
+			+"snowshoe string,"
+			+"surface string,"
+			+"trail_nu_1 string,"
+			+"trail_num string,"
+			+"trail_num1 string,"
+			+"trail_num_ string,"
+			+"type string,"
+			+"url string"
+			+">"; 
+
+		// StructType trailPropertiesSchema = new StructType(new StructField[] {
+		// 	new StructField("EDIT_DATE", DataTypes.StringType, true, null),
+		// 	new StructField("INPUT_DATE", DataTypes.StringType, true, null),
+		// 	new StructField("access", DataTypes.StringType, true, null),
+		// 	new StructField("atv", DataTypes.StringType, true, null),
+		// 	new StructField("bike", DataTypes.StringType, true, null),
+		// 	new StructField("dogs", DataTypes.StringType, true, null),
+		// 	new StructField("feature_id", DataTypes.StringType, true, null),
+		// 	new StructField("groomed", DataTypes.StringType, true, null),
+		// 	new StructField("groomer_ur", DataTypes.StringType, true, null),
+		// 	new StructField("highway_ve", DataTypes.StringType, true, null),
+		// 	new StructField("hiking", DataTypes.StringType, true, null),
+		// 	new StructField("horse", DataTypes.StringType, true, null),
+		// 	new StructField("length_mi_", DataTypes.DoubleType, true, null),
+		// 	new StructField("manager", DataTypes.StringType, true, null),
+		// 	new StructField("max_elevat", DataTypes.DoubleType, true, null),
+		// 	new StructField("min_elevat", DataTypes.DoubleType, true, null),
+		// 	new StructField("motorcycle", DataTypes.StringType, true, null),
+		// 	new StructField("name", DataTypes.StringType, true, null),
+		// 	new StructField("name_1", DataTypes.StringType, true, null),
+		// 	new StructField("name_2", DataTypes.StringType, true, null),
+		// 	new StructField("name_3", DataTypes.StringType, true, null),
+		// 	new StructField("ohv_gt_50", DataTypes.StringType, true, null),
+		// 	new StructField("oneway", DataTypes.StringType, true, null),
+		// 	new StructField("place_id", DataTypes.LongType, true, null),
+		// 	new StructField("place_id_1", DataTypes.LongType, true, null),
+		// 	new StructField("place_id_2", DataTypes.LongType, true, null),
+		// 	new StructField("place_id_3", DataTypes.LongType, true, null),
+		// 	new StructField("plowed", DataTypes.StringType, true, null),
+		// 	new StructField("seasonal_1", DataTypes.StringType, true, null),
+		// 	new StructField("seasonal_2", DataTypes.StringType, true, null),
+		// 	new StructField("seasonal_3", DataTypes.StringType, true, null),
+		// 	new StructField("seasonalit", DataTypes.StringType, true, null),
+		// 	new StructField("ski", DataTypes.StringType, true, null),
+		// 	new StructField("snowmobile", DataTypes.StringType, true, null),
+		// 	new StructField("snowshoe", DataTypes.StringType, true, null),
+		// 	new StructField("surface", DataTypes.StringType, true, null),
+		// 	new StructField("trail_nu_1", DataTypes.StringType, true, null),
+		// 	new StructField("trail_num", DataTypes.StringType, true, null),
+		// 	new StructField("trail_num1", DataTypes.StringType, true, null),
+		// 	new StructField("trail_num_", DataTypes.StringType, true, null),
+		// 	new StructField("type", DataTypes.StringType, true, null),
+		// 	new StructField("url", DataTypes.StringType, true, null)
+		// });
+
+		StructType featureSchema = new StructType(new StructField[] {
+			new StructField("type", DataTypes.StringType, true, null),
+			new StructField("properties", DataTypes.StringType, true, null),
+			new StructField("geometry", DataTypes.StringType, true, null) // Important this is a string
+			// new StructField("properties", trailPropertiesSchema, true, null)
+		});
+
+		StructType featureCollectionSchema = new StructType(new StructField[] {
+			new StructField("name", DataTypes.StringType, true, null),
+			new StructField("type", DataTypes.StringType, true, null),
+			new StructField("crs", DataTypes.StringType, true, null),
+			new StructField("features", DataTypes.StringType/*DataTypes.createArrayType(featureSchema)*/, true, null)
+		});
+
 		// Only works because the CS machines share our home directories
 		// multiline option needed to read json that's not in json lines format
-		String schema = "type string, crs string, features array<struct<type string, geometry string, properties string>>";
-		Dataset<Row> trailsDataset = spark.read().schema(schema).option("multiLine", true)
-				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/raw/cpw_trails/json/Trails_COTREX02072024.json")
-				.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
-				.select("features.*") // Unpack the features struct.
-				// .withColumn("properties", expr("from_json(properties, schema_of_json(properties))"))
-				.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
-				.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")) // Convert CRS to EPSG:4326
-				// .select("properties.*", "geometry") // Flatten
-				.select("geometry") // TODO: SWITCH TO USING PROPERTIES AGAIN. TEMP
-				.drop(irrelevantFields);
+		String schema = "type string, crs string, features array<struct<type string, geometry string, properties "+trailPropertiesSchema+">>";
+		Dataset<Row> trailsDataset = spark.read().schema(schema)
+			.option("multiLine", true).json("/s/bach/n/under/tmoleary/cs555/term-project/data/raw/cpw_trails/json/Trails_COTREX02072024.json")
+			// .json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl")
+			.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
+			.select("features.*") // Unpack the features struct.
+			.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
+			.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")) // Convert CRS to EPSG:4326
+			.select("properties.*", "geometry") // Flatten
+			.drop(irrelevantFields);
 
 		trailsDataset.printSchema();
 		trailsDataset.show(1);
 
 		// trailsDataset = calculateSimilarityScores(spark, trailsDataset, trailQueries);
-		trailsDataset = trailsDataset.drop(allStringFields).drop(numericFields); //TEMP
 
 
-		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
-		trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
+		// String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
+		// trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
 
-		trailsDataset.show(10);
+		// trailsDataset.show(10);
 
 	}
 
-	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> categorical,
-			String[] trailQueries) {
-		Dataset<Row> vectorized = vectorize(categorical);
+	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> trailsDataset, String[] trailQueries) {
+		Dataset<Row> vectorized = vectorize(trailsDataset);
 		vectorized.persist();
 
 		// Find all the trails matching user input
@@ -165,13 +268,13 @@ public class App {
 
 		// Define similarity score function
 		UserDefinedFunction score = udf(
-				(UDF1<SparseVector, Double>) (SparseVector vec) -> vec.dot(query), DataTypes.DoubleType);
+				(UDF1<SparseVector, Double>) (SparseVector vec) -> vec.dot(query), DataTypes.DoubleType
+		);
 		spark.udf().register("score", score);
 
 		// Calculate similarity score for all trails
 		vectorized.createOrReplaceTempView("vectorized");
-		Dataset<Row> similarityScores = spark
-				.sql("SELECT *, score(vector) as similarity FROM vectorized");
+		Dataset<Row> similarityScores = spark.sql("SELECT *, score(vector) as similarity FROM vectorized");
 		similarityScores = similarityScores.drop("vector");
 		vectorized.unpersist();
 		return similarityScores;
@@ -213,13 +316,6 @@ public class App {
 			}
 		}
 		return false;
-	}
-
-	private static Dataset<Row> getProperties(SparkSession spark, Dataset<Row> trailsDataset) {
-		trailsDataset.createOrReplaceTempView("trails");
-		// Move properties to root
-		Dataset<Row> properties = spark.sql("SELECT properties.*, geometry FROM trails");
-		return properties.drop(irrelevantFields);
 	}
 
 	private static Dataset<Row> vectorize(Dataset<Row> categoricalProperties) {
