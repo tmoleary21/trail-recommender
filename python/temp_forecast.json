@@ -1,0 +1,10 @@
+{
+    "shortForecast": "Sunny and warm",
+    "detailedForecast": "High of 72F, low of 68F. Wind speeds between 0 and 10mph. 1% Chance of precipation. Relative Humidity is 77%.",
+    "startTime": "24-4-24'T'4:00:00",
+    "endTime": "24-24-24'T'16:00:00",
+    "temperature": 70,
+    "windSpeed": "5 mph",
+    "pctPrecipitation": 1,
+    "pctRelativeHumidity": 77
+}

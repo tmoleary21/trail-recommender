@@ -9,7 +9,6 @@ class Point:
 
 def getForecast(point):
     gridpointURL = getGridpoint(point)
-    
     response = queryAPI(gridpointURL)
     return formatForecast(response)
 
