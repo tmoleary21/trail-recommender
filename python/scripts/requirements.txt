@@ -1,5 +1,0 @@
-ArgumentParser
-Cython
-geopandas
-pandas
-pydeck
