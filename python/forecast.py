@@ -8,8 +8,9 @@ class Point:
         self.lon = _lon
 
 def getForecast(point):
+    print(point)
     gridpointURL = getGridpoint(point)
-    
+    print(gridpointURL) 
     response = queryAPI(gridpointURL)
     return formatForecast(response)
 
@@ -31,6 +32,7 @@ def queryAPI(apiUrl):
     return None
 
 def formatForecast(response):
+    print(response)
     soonestPeriod = response["properties"]["periods"][0]
 
     forecast = {
