@@ -2,8 +2,11 @@ package trail;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.sql.rowset.RowSetFactory;
 
@@ -25,6 +28,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.api.java.function.FilterFunction;
 import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.api.java.function.ForeachFunction;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.api.java.function.ReduceFunction;
 import org.apache.spark.ml.feature.OneHotEncoder;
@@ -239,22 +243,57 @@ public class App {
 			// .json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl")
 			.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
 			.select("features.*") // Unpack the features struct.
-			.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
-			.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")) // Convert CRS to EPSG:4326
 			.select("properties.*", "geometry") // Flatten
 			.drop(irrelevantFields);
+			
+		Dataset<Row> geometry = trailsDataset
+			.select("feature_id", "geometry")
+			.filter(trailsDataset.col("geometry").isNotNull())
+			.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
+			.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")); // Convert CRS to EPSG:4326
 
-		trailsDataset.printSchema();
-		trailsDataset.show(1);
+		// geometry.printSchema();
+		
+		Dataset<Row> properties = trailsDataset.drop("geometry");
 
-		// trailsDataset = calculateSimilarityScores(spark, trailsDataset, trailQueries);
+		// properties.printSchema();
 
+		// trailsDataset.printSchema();
+		// trailsDataset.show(1);
 
-		// String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
-		// trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
+		properties = calculateSimilarityScores(spark, properties, trailQueries);
+		// properties.printSchema();
+		// properties.show(10);
 
-		// trailsDataset.show(10);
+		List<Row> sparkCandidates = properties.sort(properties.col("similarity").desc()).takeAsList(50);
+		// System.out.println(sparkCandidates);
 
+		
+		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
+		geometry = geometry.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"))
+			.drop("geometry");
+		
+		// geometry.printSchema();
+		// geometry.show((int)geometry.count());
+		
+		Map<String, Double> distanceMap = geometry
+		.collectAsList()
+		.stream()
+		.collect(Collectors.toMap(
+			item -> item.getString(0), 
+			item -> item.getDouble(1)
+			));
+			
+		List<ScoredTrail> candidates = sparkCandidates
+			.stream()
+			.map(item -> new ScoredTrail(item, (Double) distanceMap.get((String) item.getAs("feature_id"))))
+			.sorted(Comparator.comparing(ScoredTrail::getDistance))
+			.limit(10)
+			.collect(Collectors.toList());
+
+		System.out.println(candidates);
+		
+			
 	}
 
 	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> trailsDataset, String[] trailQueries) {
