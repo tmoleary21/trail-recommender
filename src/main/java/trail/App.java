@@ -20,6 +20,8 @@ import org.apache.spark.sql.expressions.UserDefinedFunction;
 
 import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.functions.udf;
+import static org.apache.spark.sql.functions.abs;
+import static org.apache.spark.sql.functions.avg;
 
 import org.apache.sedona.spark.SedonaContext;
 
@@ -152,28 +154,62 @@ public class App {
 			.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")); // Convert CRS to EPSG:4326
 
 
-		trailsDataset = calculateSimilarityScores(spark, trailsDataset, trailQueries);
-
-		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
-		trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
-			
-		trailsDataset = trailsDataset.drop("geometry");
-
-		Dataset<Row> similarCandidates = trailsDataset.sort(trailsDataset.col("similarity").desc()).limit(100);
-		Dataset<Row> closestSimilar = similarCandidates.sort(similarCandidates.col("distance").asc()).limit(10);
-
-		closestSimilar.write().json("/s/bach/n/under/tmoleary/cs555/term-project/data/output"); // Can't name file. Saved as hadoop part filename in json lines format
-			
-	}
-
-	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> trailsDataset, String[] trailQueries) {
 		Dataset<Row> vectorized = vectorize(trailsDataset);
 		vectorized.persist();
 
 		// Find all the trails matching user input
 		Dataset<Row> queriedTrails = vectorized.filter((FilterFunction<Row>) row -> nameIncluded(trailQueries, row));
+
+		trailsDataset = calculateSimilarityScores(spark, vectorized, queriedTrails);
+		vectorized.unpersist();
+
+		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
+		trailsDataset = trailsDataset
+			.withColumn("centroid", expr("ST_Centroid(geometry)"))
+			.withColumn("distance", expr("ST_DistanceSphere(centroid, "+userLocationSql+")"))
+			.drop("geometry");
+
+
+		// numeric
+		Row averages = queriedTrails.select(
+			avg(queriedTrails.col("length_mi_")).as("length"), 
+			avg(queriedTrails.col("max_elevat").minus(queriedTrails.col("min_elevat")).as("elevation"))
+		).takeAsList(1).get(0);
+
+		double averageLength = averages.getDouble(0);
+		double averageElevation = averages.getDouble(1);
+
+		Dataset<Row> similarCandidates = trailsDataset.sort(
+			trailsDataset.col("similarity").desc()
+		).limit(1000);
+		similarCandidates = similarCandidates.sort(
+			abs(similarCandidates.col("length_mi_")
+				.minus(averageLength)
+			).asc()
+		).limit(100);
+		similarCandidates = similarCandidates.sort(
+			abs(similarCandidates.col("max_elevat")
+				.minus(similarCandidates.col("min_elevat"))
+				.minus(averageElevation)
+			).asc()
+		).limit(50);
+		Dataset<Row> closestSimilar = similarCandidates.sort(
+			similarCandidates.col("distance").asc()
+		).limit(10);
+
+		closestSimilar = closestSimilar
+			.drop(numericFields)
+			.withColumn("centroid", expr("ST_AsGeoJSON(centroid)"));
+
+		closestSimilar.write()
+			.mode("overwrite")
+			.json("/s/bach/n/under/tmoleary/cs555/term-project/data/output"); // Can't name file. Saved as hadoop part filename in json lines format
+			
+	}
+
+	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> vectorized, Dataset<Row> queriedTrails) {
 		// Merge to one vector
-		SparseVector query = mergeTrailProperties(queriedTrails);
+		SparseVector query = mergeTrailVectors(queriedTrails);
 
 		// Define similarity score function
 		UserDefinedFunction score = udf(
@@ -185,11 +221,10 @@ public class App {
 		vectorized.createOrReplaceTempView("vectorized");
 		Dataset<Row> similarityScores = spark.sql("SELECT *, score(vector) as similarity FROM vectorized");
 		similarityScores = similarityScores.drop("vector");
-		vectorized.unpersist();
 		return similarityScores;
 	}
 
-	private static SparseVector mergeTrailProperties(Dataset<Row> queriedTrails) {
+	private static SparseVector mergeTrailVectors(Dataset<Row> queriedTrails) {
 		Dataset<Row> justVectors = queriedTrails.select("vector");
 		Row reducedRow = justVectors.reduce((ReduceFunction<Row>) App::addRowVectors);
 		return (SparseVector) reducedRow.get(0);

@@ -1,11 +1,11 @@
 #! /bin/bash
 
+rm -rf $SPARK_HOME/work/*
+
 $SPARK_HOME/bin/spark-submit \
     --class trail.App \
     --master spark://nashville:31040 \
     ./build/libs/trail-recommender.jar
-
-
 
 
 # The repositories and packages options below are an alternative (that I found, not that was explicitly given) to building a 
