@@ -1,27 +1,13 @@
 package trail;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-
-import javax.sql.rowset.RowSetFactory;
-
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.NumericType;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-import org.sparkproject.dmg.pmml.DataType;
-
-import com.google.protobuf.Struct;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.api.java.function.FilterFunction;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.api.java.function.ReduceFunction;
 import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.OneHotEncoderModel;
@@ -30,13 +16,12 @@ import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.ml.linalg.DenseVector;
 import org.apache.spark.ml.linalg.SparseVector;
-import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
+
+import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.functions.udf;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.SparkConf;
+import org.apache.sedona.spark.SedonaContext;
 
 public class App {
 
@@ -63,15 +48,6 @@ public class App {
 			"place_id_3"
 	};
 
-	private static final String[] optionFields = {
-			"access", "manager", "seasonal_1", "seasonal_2", "seasonal_3", "seasonalit", "surface", "type"
-	};
-
-	private static final String[] booleanFields = {
-			"atv", "bike", "dogs", "groomed", "highway_ve", "hiking", "horse", "motorcycle", "ohv_gt_50", "oneway",
-			"plowed", "ski", "snowmobile", "snowshoe"
-	};
-
 	// options and booleans
 	private static final String[] allStringFields = {
 			"access", "manager", "seasonal_1", "seasonal_2", "seasonal_3", "seasonalit", "surface", "type", "atv",
@@ -92,10 +68,55 @@ public class App {
 
 	private static final String[] numericFields = { "length_mi_", "max_elevat", "min_elevat" };
 
+	private static final String trailPropertiesSchema = "struct<"
+			+"EDIT_DATE string,"
+			+"INPUT_DATE string,"
+			+"access string,"
+			+"atv string,"
+			+"bike string,"
+			+"dogs string,"
+			+"feature_id string,"
+			+"groomed string,"
+			+"groomer_ur string,"
+			+"highway_ve string,"
+			+"hiking string,"
+			+"horse string,"
+			+"length_mi_ double,"
+			+"manager string,"
+			+"max_elevat double,"
+			+"min_elevat double,"
+			+"motorcycle string,"
+			+"name string,"
+			+"name_1 string,"
+			+"name_2 string,"
+			+"name_3 string,"
+			+"ohv_gt_50 string,"
+			+"oneway string,"
+			+"place_id long,"
+			+"place_id_1 long,"
+			+"place_id_2 long,"
+			+"place_id_3 long,"
+			+"plowed string,"
+			+"seasonal_1 string,"
+			+"seasonal_2 string,"
+			+"seasonal_3 string,"
+			+"seasonalit string,"
+			+"ski string,"
+			+"snowmobile string,"
+			+"snowshoe string,"
+			+"surface string,"
+			+"trail_nu_1 string,"
+			+"trail_num string,"
+			+"trail_num1 string,"
+			+"trail_num_ string,"
+			+"type string,"
+			+"url string"
+			+">";
+
 	public static void main(String[] args) {
 
-		try (SparkSession spark = SparkSession.builder()
-				.appName("Trail Recommender")
+		try (SparkSession spark = SedonaContext.builder()
+				.appName("Trail recommender")
 				.getOrCreate();) {
 
 			run(spark);
@@ -116,26 +137,37 @@ public class App {
 		// ---------------------------------------
 
 		// Only works because the CS machines share our home directories
-		Dataset<Row> trailsDataset = spark.read()
-				.json("/s/bach/n/under/tmoleary/cs555/term-project/data/trails/Trails_COTREX02072024.jsonl");
+		// multiline option needed to read json that's not in json lines format
+		String schema = "type string, crs string, features array<struct<type string, geometry string, properties "+trailPropertiesSchema+">>";
+		Dataset<Row> trailsDataset = spark.read().schema(schema)
+			.option("multiLine", true).json("/s/bach/n/under/tmoleary/cs555/term-project/data/raw/cpw_trails/json/Trails_COTREX02072024.json")
+			.selectExpr("explode(features) as features") // Explode the envelope to get one feature per row.
+			.select("features.*") // Unpack the features struct.
+			.select("properties.*", "geometry") // Flatten
+			.drop(irrelevantFields);
 
-		Dataset<Row> properties = getProperties(spark, trailsDataset);
+		trailsDataset = trailsDataset
+			.filter(trailsDataset.col("geometry").isNotNull()) // Remove null geometries
+			.withColumn("geometry", expr("ST_GeomFromGeoJSON(geometry)")) // Convert the geometry string.
+			.withColumn("geometry", expr("ST_TRANSFORM(geometry, 'EPSG:26913','EPSG:4326')")); // Convert CRS to EPSG:4326
 
-		Dataset<Row> numeric = properties.drop(allStringFields);
 
-		Dataset<Row> categorical = properties.drop(numericFields);
+		trailsDataset = calculateSimilarityScores(spark, trailsDataset, trailQueries);
 
-		Dataset<Row> similarityScores = calculateSimilarityScores(spark, categorical, trailQueries);
-		similarityScores.show(4);
+		String userLocationSql = "ST_GeomFromText('Point("+locationLongitude+" "+locationLatitude+")')";
+		trailsDataset = trailsDataset.withColumn("distance", expr("ST_DistanceSphere(geometry, "+userLocationSql+")"));
+			
+		trailsDataset = trailsDataset.drop("geometry");
 
-		// vectorized.show(10);
-		// numeric.show(10);
+		Dataset<Row> similarCandidates = trailsDataset.sort(trailsDataset.col("similarity").desc()).limit(100);
+		Dataset<Row> closestSimilar = similarCandidates.sort(similarCandidates.col("distance").asc()).limit(10);
 
+		closestSimilar.write().json("/s/bach/n/under/tmoleary/cs555/term-project/data/output"); // Can't name file. Saved as hadoop part filename in json lines format
+			
 	}
 
-	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> categorical,
-			String[] trailQueries) {
-		Dataset<Row> vectorized = vectorize(categorical);
+	private static Dataset<Row> calculateSimilarityScores(SparkSession spark, Dataset<Row> trailsDataset, String[] trailQueries) {
+		Dataset<Row> vectorized = vectorize(trailsDataset);
 		vectorized.persist();
 
 		// Find all the trails matching user input
@@ -145,15 +177,15 @@ public class App {
 
 		// Define similarity score function
 		UserDefinedFunction score = udf(
-				(UDF1<SparseVector, Double>) (SparseVector vec) -> vec.dot(query), DataTypes.DoubleType);
+				(UDF1<SparseVector, Double>) (SparseVector vec) -> vec.dot(query), DataTypes.DoubleType
+		);
 		spark.udf().register("score", score);
 
 		// Calculate similarity score for all trails
 		vectorized.createOrReplaceTempView("vectorized");
-		Dataset<Row> similarityScores = spark
-				.sql("SELECT *, score(vector) as similarity FROM vectorized");
+		Dataset<Row> similarityScores = spark.sql("SELECT *, score(vector) as similarity FROM vectorized");
 		similarityScores = similarityScores.drop("vector");
-
+		vectorized.unpersist();
 		return similarityScores;
 	}
 
@@ -193,17 +225,6 @@ public class App {
 			}
 		}
 		return false;
-	}
-
-	private static Dataset<Row> getProperties(SparkSession spark, Dataset<Row> trailsDataset) {
-		Dataset<Row> properties = replaceRoot(spark, trailsDataset, "properties");
-		return properties.drop(irrelevantFields);
-	}
-
-	private static Dataset<Row> replaceRoot(SparkSession spark, Dataset<Row> df, String subStructField) {
-		// Only way I could figure to get properties out without making huge schema
-		df.createOrReplaceTempView("replacement_view");
-		return spark.sql("SELECT " + subStructField + ".* FROM replacement_view");
 	}
 
 	private static Dataset<Row> vectorize(Dataset<Row> categoricalProperties) {

@@ -7,21 +7,31 @@ dependencies {
     // https://mvnrepository.com/artifact/org.json/json
     implementation group: 'org.json', name: 'json', version: '20240303'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-core
-    implementation 'org.apache.spark:spark-core_2.13:3.5.1'
+    implementation 'org.apache.spark:spark-core_2.12:3.5.1'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-sql
-    compileOnly 'org.apache.spark:spark-sql_2.13:3.5.1'
+    compileOnly 'org.apache.spark:spark-sql_2.12:3.5.1'
     // https://mvnrepository.com/artifact/org.apache.spark/spark-mllib
-    compileOnly 'org.apache.spark:spark-mllib_2.13:3.5.1'
+    compileOnly 'org.apache.spark:spark-mllib_2.12:3.5.1'
+
+    implementation 'org.apache.sedona:sedona-spark-shaded-3.5_2.12:1.5.1'
+    implementation 'org.datasyslab:geotools-wrapper:1.5.1-28.2'
+
 }
 
 repositories {
     mavenCentral()
+    maven { // Needed for a sedona dependency
+        url "https://artifacts.unidata.ucar.edu/repository/unidata-all/"
+    }
 }
 
-
-// I think this is necessary to submit job to spark
 jar {
     manifest {
         attributes 'Main-Class': 'trail.App'
     }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    zip64(true)
 }
