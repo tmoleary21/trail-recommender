@@ -6,11 +6,11 @@ import json
 from forecast import getForecast, Point 
 
 def main(input_trails, optimal_temp):
-    input_trails_str = " ".join(trail for trail in input_trails)
-    #subprocess.run(f'../submit.sh {input_trails_str}', shell=True)
+    # input_trails_str = " ".join(trail for trail in input_trails)
+    subprocess.run(['../submit.sh', *input_trails])
     
-    with open('./temp_forecast.json') as temp_forecast:
-        forecast = json.load(temp_forecast)
+    # with open('./temp_forecast.json') as temp_forecast:
+    #     forecast = json.load(temp_forecast)
     
     recommended_trails = []
 
@@ -23,8 +23,8 @@ def main(input_trails, optimal_temp):
             # centroid: (lon, lat)            
             result["centroid"] = result_centroid["coordinates"]
             # currently, https://api.weather.gov is down as of 4-24-24. this is the API we use to get the weather
-            # result["forecast"] = getForecast(Point(result["centroid"][1], result["centroid][0]))
-            result["forecast"] = forecast
+            result["forecast"] = getForecast(Point(result["centroid"][1], result["centroid"][0]))
+            # result["forecast"] = forecast
             recommended_trails.append(result)
 
     write_results_to_file(recommended_trails, sorted(recommended_trails, key=lambda result: forecast_tuple(result, optimal_temp)))
@@ -39,7 +39,7 @@ def forecast_tuple(result, optimal_temp):
     return (temperature, precipitation, windSpeed)
 
 def write_results_to_file(results, results_by_weather):
-    subprocess.run('rm ../results/results.txt', shell=True)
+    os.mkdir('../results')
     with open('../results/results.txt', 'w') as outfile:
         outfile.write("Recommended Trails:\n")
         results_string = json.dumps(results, indent=2)

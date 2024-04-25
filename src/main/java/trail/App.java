@@ -20,6 +20,9 @@ import org.apache.spark.sql.expressions.UserDefinedFunction;
 
 import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.functions.udf;
+
+import java.util.Arrays;
+
 import static org.apache.spark.sql.functions.abs;
 import static org.apache.spark.sql.functions.avg;
 
@@ -120,18 +123,18 @@ public class App {
 		try (SparkSession spark = SedonaContext.builder()
 				.appName("Trail recommender")
 				.getOrCreate();) {
-
-			run(spark);
+					
+			run(spark, args);
 
 		}
 
 	}
 
-	private static void run(SparkSession spark) {
+	private static void run(SparkSession spark, String[] trailQueries) {
 
 		// User inputs (temporary) --------------
 
-		String[] trailQueries = { "Horsetooth Rock Trail", "Arthur's Rock Trail" }; // place_id 13275, 13875 resp.
+		// String[] trailQueries = { "Horsetooth Rock Trail", "Arthur's Rock Trail" }; // place_id 13275, 13875 resp.
 
 		double locationLatitude = 40.575405;
 		double locationLongitude = -105.084648;
