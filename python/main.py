@@ -39,8 +39,10 @@ def forecast_tuple(result, optimal_temp):
     return (temperature, precipitation, windSpeed)
 
 def write_results_to_file(results, results_by_weather):
-    os.mkdir('../results')
-    with open('../results/results.txt', 'w') as outfile:
+    dir_path = "../results"
+    if not os.path.exists(dir_path):
+        os.mkdir(dir_path)
+    with open(f'{dir_path}/results.txt', 'w') as outfile:
         outfile.write("Recommended Trails:\n")
         results_string = json.dumps(results, indent=2)
         outfile.write(results_string)       
