@@ -10,14 +10,16 @@ class Point:
 def getForecast(point):
     gridpointURL = getGridpoint(point)
     response = queryAPI(gridpointURL)
+    #print(response)
     return formatForecast(response)
 
 def getGridpoint(point):
     pointURL = f"{NWS_API_URL}/points/{point.lat},{point.lon}"
-    
+    #print(point)
     response = queryAPI(pointURL)
 
     forecastURL = response["properties"]["forecast"]
+    #print(forecastURL)
     return forecastURL
 
 def queryAPI(apiUrl):
@@ -47,7 +49,7 @@ def formatForecast(response):
 
 def main():
     point = Point(40,-105)
-    getForecast(point)
+    print(getForecast(point))
 
 if __name__ == "__main__":
     main()

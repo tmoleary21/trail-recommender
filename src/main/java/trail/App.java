@@ -47,7 +47,7 @@ public class App {
 			"trail_num1",
 			"trail_num_",
 			"url",
-			"place_id",
+			//"place_id",
 			"place_id_1",
 			"place_id_2",
 			"place_id_3"
@@ -59,6 +59,13 @@ public class App {
 			"bike", "dogs", "groomed", "highway_ve", "hiking", "horse", "motorcycle", "ohv_gt_50", "oneway",
 			"plowed", "ski", "snowmobile", "snowshoe"
 	};
+
+    private static final String[] dropStringFields = {
+            "manager", "seasonal_1", "seasonal_2", "seasonal_3", "seasonalit", "type", "atv",
+            "groomed", "highway_ve", "motorcycle", "ohv_gt_50", "oneway",
+            "plowed", "ski", "snowmobile", "snowshoe"
+    };
+	
 
 	private static final String[] indexedFields = {
 			"accessI", "managerI", "seasonal_1I", "seasonal_2I", "seasonal_3I", "seasonalitI", "surfaceI", "typeI",
@@ -201,7 +208,7 @@ public class App {
 		).limit(10);
 
 		closestSimilar = closestSimilar
-			.drop(numericFields)
+			//.drop(numericFields)
 			.withColumn("centroid", expr("ST_AsGeoJSON(centroid)"));
 
 		closestSimilar.write()
@@ -287,7 +294,7 @@ public class App {
 				.setOutputCol("vector");
 		Dataset<Row> withVector = assembler.transform(encoded);
 
-		Dataset<Row> cleaned = withVector.drop(allStringFields);
+		Dataset<Row> cleaned = withVector.drop(dropStringFields);
 		cleaned = cleaned.drop(indexedFields);
 		cleaned = cleaned.drop(encodedFields);
 

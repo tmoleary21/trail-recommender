@@ -1,0 +1,23 @@
+==== testing different combinations of nodes and workers ====
+
+8 2 sample_run Start Time: 1714241381.760478 , End Time: 1714241484.8042853
+8 1 sample_run Start Time: 1714240972.6163313 , End Time: 1714241071.417859
+8 4 sample_run Start Time: 1714241593.1756377 , End Time: 1714241747.8095527
+1 1 sample_run Start Time: 1714241892.2833292 , End Time: 1714241926.576075
+1 2 sample_run Start Time: 1714242054.9072728 , End Time: 1714242092.694205
+1 4 sample_run Start Time: 1714242173.310863 , End Time: 1714242221.4932072
+2 1 sample_run Start Time: 1714242321.4059596 , End Time: 1714242361.1451607
+2 2 sample_run Start Time: 1714242434.1612153 , End Time: 1714242483.465806
+2 4 sample_run Start Time: 1714242552.2300162 , End Time: 1714242613.5558043
+4 1 sample_run Start Time: 1714242829.5579705 , End Time: 1714242880.5064437
+4 2 sample_run Start Time: 1714242940.8465106 , End Time: 1714243008.6666067
+4 4 sample_run Start Time: 1714243058.8882565 , End Time: 1714243152.3797147
+16 1 sample_run Start Time: 1714243297.1204455 , End Time: 1714243402.3164535
+16 2 sample_run Start Time: 1714243496.543535 , End Time: 1714243657.346306
+16 4 sample_run Start Time: 1714244050.0853043 , End Time: 1714244217.900008
+
+==== testing different inputs ====
+10 1 sample_run1 Start Time: 1714252715.257068 , End Time: 1714252768.6968737
+10 1 sample_run2 Start Time: 1714253253.9290452 , End Time: 1714253310.6386523
+10 1 sample_run4 Start Time: 1714253362.7056384 , End Time: 1714253422.7088773
+10 1 sample_run8 Start Time: 1714253620.4962466 , End Time: 1714253682.6463525

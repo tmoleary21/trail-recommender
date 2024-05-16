@@ -17,18 +17,18 @@
 
 # A Spark Worker will be started on each of the machines listed below.
 # Tyson's Machines
-jackson
-jefferson-city
-juneau
-lansing
-lincoln
+#jackson
+#jefferson-city
+#juneau
+#lansing
+#lincoln
 # little-rock # Not working
-madison
-montgomery
-montpelier
-nashville
-oklahoma-city
-olympia
+#madison
+#montgomery
+#montpelier
+#nashville
+#oklahoma-city
+#olympia
 
 # Jackson's Machines
 phoenix
@@ -39,7 +39,7 @@ richmond
 sacramento
 saint-paul
 salem
-salt-lake-city
-santa-fe
-springfield
-tallahassee
+#salt-lake-city
+#santa-fe
+#springfield
+#tallahassee
