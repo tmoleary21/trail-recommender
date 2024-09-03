@@ -2,6 +2,8 @@
 
 Term project for CS555 at CSU built by Tyson O'Leary (@tmoleary21) and Jackson Volesky (@jjvolesky)
 
+View our report: [report.pdf](report.pdf)
+
 ## Spark Setup
 
 1. `./spark/configure-spark.sh`
